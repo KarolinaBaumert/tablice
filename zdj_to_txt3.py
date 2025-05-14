@@ -64,9 +64,9 @@ def detect_license_plates(image_path):
 
         # Przytnij 12% szerokości obrazu z lewej strony
         width = x2 - x1
-        x1 += int(0.09 * width)
+        x1 += int(0.08 * width)
         height = y2 - y1
-        x2 -= int(0.03 * width)  # Odetnij 5% szerokości z prawej strony
+        x2 -= int(0.025 * width)  # Odetnij 5% szerokości z prawej strony
         y2 -= int(0.01 * height)
 
         cropped_plate = image[y1:y2, x1:x2]  # Wycięcie obszaru
@@ -75,8 +75,9 @@ def detect_license_plates(image_path):
         # Konwersja na skalę szarości
         cropped_plate_gray = cv2.cvtColor(cropped_plate1, cv2.COLOR_BGR2GRAY)
         # Wygładzanie medianowe (usuwanie szumów)
-        cropped_plate_gray = cv2.medianBlur(cropped_plate_gray, 3)
-        alpha = 1.4 # Współczynnik kontrastu
+        #cropped_plate_gray = cv2.medianBlur(cropped_plate_gray, 3)
+        cropped_plate_gray = cv2.GaussianBlur(cropped_plate_gray, (3, 3), 0)
+        alpha = 1.2 # Współczynnik kontrastu
         beta = 0.1     # Wartość jasności
         cropped_plate_gray = cv2.convertScaleAbs(cropped_plate_gray, alpha=alpha, beta=beta)
         # Wyostrzanie
@@ -109,9 +110,15 @@ def perform_ocr_on_cropped(cropped_plate_paths):
 
         # Pobierz odczytany tekst (jeśli istnieje)
         if result:
-            raw_text = result[0][-2]  # Tekst z pierwszego wyniku
-            # Przefiltruj tekst, aby zawierał tylko duże litery i liczby
-            detected_text = re.sub(r'[^A-Z0-9]', '', raw_text.upper())
+            raw_text = result[0][-2]
+            detected_text = raw_text.upper().replace('|', 'I')
+            detected_text = re.sub(r'[^A-Z0-9]', '', detected_text)
+            if len(detected_text) <= 2 and len(result) > 1:
+                second_raw_text = result[1][-2]
+                second_detected_text = second_raw_text.upper().replace('|', 'I')
+                second_detected_text = re.sub(r'[^A-Z0-9]', '', second_detected_text)
+                if 3 <= len(second_detected_text) <= 5:
+                    detected_text = detected_text + second_detected_text
             # Usuń początkowe "I", jeśli występuje
             if detected_text.startswith("I"):
                 detected_text = detected_text[1:]
@@ -135,6 +142,15 @@ def perform_ocr_on_cropped(cropped_plate_paths):
                 detected_text = 'Z' + detected_text[1:]
             if len(detected_text) > 1 and detected_text[1] == '2':
                 detected_text = detected_text[0] + 'Z' + detected_text[2:]
+            # Zamień znaki po trzeciej literze
+            if len(detected_text) > 3:
+                prefix = detected_text[:3]
+                suffix = detected_text[3:]
+                suffix = suffix.replace('B', '8') \
+                               .replace('I', '1') \
+                               .replace('O', '0') \
+                               .replace('Z', '2')
+                detected_text = prefix + suffix
             detected_texts.append(detected_text)
             print(f"Odczytano tekst: {detected_text} (czas: {elapsed_time:.2f}s)")
         else:
@@ -224,4 +240,5 @@ print(f"Łączny czas OCR: {total_ocr_time:.2f} sekund")  # Wyświetl łączny c
 # Oblicz ocenę końcową
 final_grade = calculate_final_grade(accuracy, total_ocr_time)
 print(f"Ostateczna ocena: {final_grade}")
+
 
